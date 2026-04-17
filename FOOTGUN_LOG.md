@@ -97,3 +97,24 @@ Raw notes — no polish. This becomes the anti-patterns section of the skill.
   ```
   (Note: the plugin's built output lives in `_cjs/` and `_types/`, **not** `dist/` — a common copy-paste footgun in grep instructions written for older plugin versions.) If the grep returns nothing, stop and flag to the coach before writing any code. Stale-API hallucinations are the highest-cost, lowest-visibility failure mode in FHEVM work, and they're prevented by one grep.
 
+### 2026-04-17 — `publicDecryptEuint` (and siblings) returns `bigint`, not `number`
+
+> The hardhat-plugin's decryption helpers return JavaScript `bigint` (the native arbitrary-precision type, literal suffix `n`), **not** `number`. Chai's `.to.eq(5)` will silently fail against `5n` because `bigint` and `number` are never equal under strict equality. Use `.to.eq(5n)` with the `n` suffix, or explicitly coerce with `Number(clear)` if the value is guaranteed to fit in a safe integer range. An agent generating tests from Solidity-side intuition will almost always write `.to.eq(5)` and get a confusing failure message.
+>
+> Applies to `publicDecryptEuint`, `userDecryptEuint`, and any decrypt helper returning `uint64` or larger — `euint8`/`euint16`/`euint32` technically fit in `number` but the plugin returns `bigint` uniformly for consistency.
+
+- **Source of truth:** signature in `node_modules/@fhevm/hardhat-plugin/_types/types.d.ts:77`:
+  ```ts
+  publicDecryptEuint(fhevmType: FhevmTypeEuint, handleBytes32: string, options?: FhevmPublicDecryptOptions): Promise<bigint>
+  ```
+- **How the confusing failure actually manifests in chai (worth knowing by sight):**
+  ```
+  AssertionError: expected 5n to equal 5
+   +5
+   -5n
+  ```
+  The `+` and `-` are identical-looking in a terminal scan; the `n` suffix is the only signal. Agents (and humans) skim past it and waste minutes re-checking the contract instead of the test.
+- **Related gotcha:** `await contract.someUint256Getter()` in ethers v6 also returns `bigint` for all Solidity `uint*` types. So `expect(await contract.deadline()).to.eq(3600)` will *also* fail if the contract stored `deadline` as a `uint256` — because the ABI decoder returns `bigint` uniformly. Fix: wrap the expected value in `BigInt(...)` or use the `n` suffix.
+- **Why I didn't see it coming (even after flagging it):** my first instinct was to think this only bit on very large numbers. It doesn't. The plugin / ethers returns `bigint` *regardless of the source type's range*, for consistency. Treat every Solidity-to-JS numeric crossing as `bigint` by default.
+- **Process note:** the cost of getting this wrong is a confusing test failure, not a silent bug — chai will complain. But agents burn time on the wrong hypothesis ("is my contract broken?") before checking the assertion types. Skill should name it explicitly so the first debugging step is "is this a bigint/number mismatch?".
+
