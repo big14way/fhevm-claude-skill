@@ -59,3 +59,41 @@ Raw notes — no polish. This becomes the anti-patterns section of the skill.
   4. First-time-me's confusion is a useful signal but not a necessary one. An agent is not me; an agent has never seen FHEVM before but has seen thousands of Solidity contracts where input-contribution implied read-back.
 - **Why this matters for the skill:** If I only document what confused me, I will systematically under-document the things I happened to read about in advance. The skill's job is to counter-train the model's strongest wrong priors, not to mirror my personal learning path.
 
+### 2026-04-17 — **HEADLINE ANTI-PATTERN: Trusting pre-v0.9 decryption API patterns**
+
+> The `FHE.requestDecryption(handles, callbackSelector)` → gateway callback → `checkSignatures` flow was the idiomatic public-decryption pattern in FHEVM v0.7–v0.8. It was removed during the v0.9 consolidation and does not exist in `@fhevm/solidity` v0.10+. Most tutorials, blog posts, and LLM training data still reference it. Before writing any decryption code, grep the installed library:
+> ```bash
+> grep -r "requestDecryption" node_modules/@fhevm/solidity/lib/FHE.sol
+> ```
+> If it returns nothing, use the v0.11 pattern instead: `FHE.makePubliclyDecryptable(handle)` for public reveal (plaintext lives off-chain, accessed via relayer), or user-decryption via `fhevm.userDecryptEuint` in tests and `relayer-sdk` in frontends. **Treat any generated code containing `requestDecryption`, `DecryptionOracle`, `Gateway.sol`, or `onDecryptionResult` callbacks as stale.**
+
+- **Concrete evidence I gathered:**
+  - Installed versions: `@fhevm/solidity@0.11.1`, `@fhevm/hardhat-plugin@0.4.2`, `@fhevm/host-contracts@0.10.0`.
+  - `grep -rn "requestDecryption" node_modules/@fhevm/solidity/` → **zero matches**.
+  - `grep -rn "DecryptionOracle\|Gateway\.sol" node_modules/@fhevm/` → **zero matches**.
+  - What *does* exist in this version:
+    - `FHE.makePubliclyDecryptable(value)` per type (`ebool`, `euint8/16/32/64/128/256`, etc.)
+    - `FHE.isPubliclyDecryptable(value)` — view check
+    - `FHE.checkSignatures(bytes32[] handlesList, bytes abiEncodedCleartexts, bytes decryptionProof)` — for dApps that DO receive plaintext on-chain via a caller-submitted signed result, but the library no longer ships the oracle/gateway that produces the callback. You build the entry point yourself.
+  - Plugin helper for tests: `fhevm.publicDecryptEuint(FhevmType.euint32, handle, options?)` — off-chain public decryption via the mock relayer. No on-chain callback involved.
+
+- **Why this will catch agents:** the pre-v0.9 pattern was the only documented public-decryption approach for ~18 months of Zama development. Every tutorial, example, and GitHub repo from that era uses it. Training data for current LLMs is saturated with it. An agent asked to write "a vote contract where tallies are revealed after a deadline" will, by default, produce code that:
+  1. Calls `FHE.requestDecryption(...)` — doesn't compile, symbol is gone.
+  2. Defines a `callbackReveal(uint256 requestId, uint32[] plaintexts, bytes[] signatures)` — wrong shape for v0.11 anyway.
+  3. Inherits from `GatewayCaller` or similar — no such contract ships.
+  4. References `Gateway.sol` — removed.
+  The skill must name all four patterns explicitly and redirect to `makePubliclyDecryptable` + off-chain decryption.
+
+- **Why I didn't see it coming (even with my own priors):** I spent a good chunk of my own "instinct" on this wall — I expected `FHE.requestDecryption` to exist in some form because the coach's spec called for it. I only found out it was gone by exhausting the grep and then reading the actual ACL/public-decryption functions in `FHE.sol`. The coach had the same stale prior and wrote the spec based on it. **The system worked only because I greped before implementing; had I tried to "make it compile" by guessing, I would have wasted an hour generating plausible-looking-but-wrong code.**
+
+- **The process rule this entry establishes (applies to all of Phase 1 and Phase 2):**
+  Before implementing a spec that uses any FHEVM symbol I haven't personally used in *this* repo yet, run:
+  ```bash
+  grep -n "<SymbolName>" node_modules/@fhevm/solidity/lib/FHE.sol
+  ```
+  and for plugin helpers:
+  ```bash
+  grep -rn "<HelperName>" node_modules/@fhevm/hardhat-plugin/_types/
+  ```
+  (Note: the plugin's built output lives in `_cjs/` and `_types/`, **not** `dist/` — a common copy-paste footgun in grep instructions written for older plugin versions.) If the grep returns nothing, stop and flag to the coach before writing any code. Stale-API hallucinations are the highest-cost, lowest-visibility failure mode in FHEVM work, and they're prevented by one grep.
+
