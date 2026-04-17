@@ -118,3 +118,12 @@ Raw notes — no polish. This becomes the anti-patterns section of the skill.
 - **Why I didn't see it coming (even after flagging it):** my first instinct was to think this only bit on very large numbers. It doesn't. The plugin / ethers returns `bigint` *regardless of the source type's range*, for consistency. Treat every Solidity-to-JS numeric crossing as `bigint` by default.
 - **Process note:** the cost of getting this wrong is a confusing test failure, not a silent bug — chai will complain. But agents burn time on the wrong hypothesis ("is my contract broken?") before checking the assertion types. Skill should name it explicitly so the first debugging step is "is this a bigint/number mismatch?".
 
+### 2026-04-17 — PROSPECTIVE: Anticipated footguns for ConfidentialVote (before writing code)
+
+Predictions — not claims. Two things I expect to trip me, based on what I already know about ACL, handle mutation, and the v0.11 API:
+
+1. **Per-branch `FHE.allowThis` re-grants.** The `vote` function has three branches (candidate 0/1/2), each of which mutates a tally's handle via `FHE.add`. Every branch needs its own `FHE.allowThis` on the *new* handle. I expect to either forget one of them or typo the tally variable, and the first failing vote will show up as an ACL error. Rule being tested: handle mutates per op, ACL must be re-granted per handle.
+2. **`makePubliclyDecryptable` behavior on un-voted-for tallies.** In test 6, candidates B and C never receive a vote — their `_tally` is still the constructor-time `FHE.asEuint32(0)` handle. My model says `makePubliclyDecryptable` should work on those handles since the contract has `allowThis` from the constructor, and `publicDecryptEuint` should return 0n. But this is the first test where I'm combining *trivial encryption* (`asEuint32(0)`) with *public decryption* — the counter only exercised user-decryption on trivial encryptions. If mock's public-decryption path short-circuits, hangs, or errors on a never-operated-on handle, I'll find out here.
+
+Will compare these predictions to what actually hits after the test run.
+
