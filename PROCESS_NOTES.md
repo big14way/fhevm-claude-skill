@@ -37,3 +37,16 @@ When we write the skill's "How to structure an FHEVM project" section, lift from
 **General principle this encodes:** *Separate narrative artifacts from the production code they describe.* When a log/notes file serves a different audience, purpose, or lifecycle than the code it annotates, put it in a separate repo. The inconvenience of two repos is small; the quality degradation of a contaminated narrative is large.
 
 **Meta-note on the escalation behavior:** The right move when a side-effect exceeds scope is (a) take the reversible action if it lets you see the problem more clearly, (b) stop before it calcifies into state that's hard to undo (like commits), (c) frame the decision as options with a recommendation. The pattern worked here: one speculative `git init`, zero speculative commits, three clean options presented.
+
+### 2026-04-18 — Process adjustment for op/API-heavy reference files
+
+Two consecutive files (`anti-patterns.md` entry 1.4's `euint160` workaround, `encrypted-types.md` op matrix) shipped drafts with factual errors about the FHEVM library that only review caught. Pattern: reasoning from priors without greping.
+
+**Middle-path adjustment going forward:**
+
+- **Op/API-heavy files** (`operations.md`, `access-control.md`, `input-proofs.md`, `decryption.md`): grep every documented API before drafting prose; compile every code example in `learning/` sandbox before including; tag claims `grep-verified` / `compile-verified` / `reasoned` in the draft so review can focus on reasoned claims.
+- **Lighter files** (`frontend-integration.md`, `testing.md`, `troubleshooting.md`): current cadence.
+
+**Trade-off:** ~20–30 min extra per heavy file, in exchange for fewer revision rounds and higher factual baseline.
+
+**Why this adjustment matters for the skill's credibility budget:** every factual error that reaches the review stage is a cost paid by both sides — reviewer time to catch it, author time to revise, and an incremental risk that one slips through. Front-loading verification on files where API specificity is the content trades cheap upfront grep-work for expensive downstream cleanup. The heavy/light split is deliberate: files dominated by conceptual material (testing patterns, troubleshooting trees, frontend orientation) are not verification-dense in the same way, and applying the heavier discipline there would be over-engineered.
