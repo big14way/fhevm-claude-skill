@@ -127,3 +127,50 @@ Predictions — not claims. Two things I expect to trip me, based on what I alre
 
 Will compare these predictions to what actually hits after the test run.
 
+### 2026-04-17 — `Promise.all` of parallel `publicDecryptEuint` calls races the mock coprocessor's event cursor
+
+> **Calling `fhevm.publicDecryptEuint` in parallel via `Promise.all([...])` crashes the mock coprocessor with a cursor race** when the test has produced enough events. The mock's `BlockLogCursor` is not concurrency-safe — multiple decrypt calls try to advance through the same event log cursor simultaneously and one of them throws `Parse event at blockNumber=N, logIndex=M in backward order. Current blockNumber=N, logIndex=M`. **Always `await` decryption calls sequentially in tests**, even when the handles are independent and you'd intuitively expect the calls to be parallelizable.
+
+- **Exact error surface:**
+  ```
+  Error: Parse event at blockNumber=21, logIndex=1 in backward order. Current blockNumber=21, logIndex=1
+    at BlockLogCursor.updateForward (node_modules/@fhevm/mock-utils/ethers/event.ts:154:13)
+    at CoprocessorEventsIterator.next (.../CoprocessorEventsIterator.ts:44:20)
+    at MockCoprocessor.awaitCoprocessor (.../MockCoprocessor.ts:62:40)
+    ...
+    at async Promise.all (index 0)
+  ```
+  The `Promise.all (index 0)` line in the stack is the smoking gun.
+- **When it bites vs. when it doesn't:** test 6 in my suite (1 vote, 3 decrypts via `Promise.all`) **passed** — because fewer coprocessor events means the cursor race doesn't manifest. Test 5 (3 votes, 3 decrypts via `Promise.all`) **failed** — enough events to expose the race. **This is the worst kind of flake**: a test that passes on small inputs and fails on larger ones, with a mock-internal error message that doesn't obviously point to concurrency.
+- **Fix:** replace
+  ```ts
+  const [a, b, c] = await Promise.all([
+    fhevm.publicDecryptEuint(FhevmType.euint32, hA),
+    fhevm.publicDecryptEuint(FhevmType.euint32, hB),
+    fhevm.publicDecryptEuint(FhevmType.euint32, hC),
+  ]);
+  ```
+  with sequential awaits:
+  ```ts
+  const a = await fhevm.publicDecryptEuint(FhevmType.euint32, hA);
+  const b = await fhevm.publicDecryptEuint(FhevmType.euint32, hB);
+  const c = await fhevm.publicDecryptEuint(FhevmType.euint32, hC);
+  ```
+- **Why this is a tier-one agent footgun:** `Promise.all` is the idiomatic JS pattern for "I have N independent async operations, I want them all done." An agent writing tests from TypeScript intuition will reach for it by default. The mock's cursor race is an *implementation detail* of `@fhevm/mock-utils`, not a semantic property of FHEVM — but the test will fail and the error message points inside node_modules, not at the test. Without this entry, an agent (or human) will spend 30+ minutes hypothesizing "is the contract wrong? is the reveal logic wrong? is `publicDecryptEuint` broken on one of my handles?" before suspecting the `Promise.all` itself.
+- **Does it also bite `userDecryptEuint`?** I haven't tested in the same way — my counter tests only did one user-decryption per test. **Safe default: serialize all fhevm decrypt helpers in tests until proven otherwise.** If someone proves parallel works for user-decryption, update this entry; until then, the "sequential only" rule is the safe generalization.
+- **Why I didn't see it coming (despite flagging bigint and predicting other things):** I had no mental model of the mock coprocessor's internals. `Promise.all` felt like free optimization for independent decrypts. I was reasoning at the level of the public plugin API, not at the level of the mock's event-cursor implementation. Lesson: **the mock is not an identity transform of the real chain — it has its own constraints that don't show up in the plugin's type signatures.** Plugin helpers that look parallelizable may not be.
+
+### 2026-04-17 — RETROSPECTIVE: ConfidentialVote predictions vs. reality
+
+Comparing the prospective entry above against what actually happened:
+
+- **Prediction 1 (per-branch `allowThis` re-grants) — DID NOT FIRE.** The contract compiled first try and all 6 tests passed after one fix. I remembered all three `FHE.allowThis` calls in the `vote` branches. Possible reason it felt like a strong prediction: I'd just hit the same rule in the counter's `increment`, so it was salient and I wrote the contract with it front-of-mind. *Lesson: the rule becomes "free" once you've personally paid for it in a prior contract. Agents who've only read about it in a skill entry haven't "paid" — the prediction is still valid for them.*
+
+- **Prediction 2 (`makePubliclyDecryptable` on never-operated handles) — DID NOT FIRE.** Test 6 revealed tallies B and C (constructor-time `FHE.asEuint32(0)`, never touched by `FHE.add`) and they decrypted cleanly to `0n` via `publicDecryptEuint`. Same conclusion as the earlier "trivially-encrypted constants decrypt identically to operation results" negative-result entry — now reconfirmed for the public-decryption path too, not just user-decryption. Still mock-only; still worth re-verifying on real Sepolia before trusting this broadly.
+
+- **WHAT I DID NOT PREDICT AND GOT BURNED BY — the `Promise.all` cursor race on `publicDecryptEuint` (logged above).** This was the actual footgun of the round. It's a concurrency bug in the mock coprocessor's event cursor, completely outside my mental model before writing the test. It manifests as a flake (passes on small inputs, fails on large) with an internal mock error message. **This is a stronger anti-pattern than either of my predictions, and I would not have written it in the log had the test not actually failed.**
+
+- **What the prediction exercise got me anyway, even though both were wrong:** writing them down made me attentive to the `allowThis` pattern while coding (I wrote all three re-grants deliberately rather than autopilot), and made me check `publicDecryptEuint` on trivial encryptions specifically in test 6 rather than skipping to "obviously it works." Both of those vigilances were useful even though neither turned into an entry. Prospective entries are not "cheap retrospective entries" — they're cognitive scaffolding that shapes the coding, whether or not they end up validated.
+
+- **Meta-lesson for the skill:** the highest-value entries are *not* predictable by someone who's internalized the rules. The Promise.all/cursor-race entry is valuable precisely because it lives outside the usual FHEVM mental model (ACL, handles, encrypted types) — it's a property of the *testing tooling*, not the protocol. An agent reading the skill needs both kinds of entries: the predictable ones (ACL rules, handle mutation) that prevent obvious mistakes, and the tooling-surface entries (bigint returns, cursor races, missing symbols) that prevent non-obvious failures from research-time tools.
+
