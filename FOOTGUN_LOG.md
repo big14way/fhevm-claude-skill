@@ -218,3 +218,21 @@ Comparing the prospective entry above against what actually happened:
 - **Why I didn't see it coming:** my mental model for library packages was "declared → usable." In FHEVM the `encrypted-types` package is a *type declaration surface* that is wider than the `@fhevm/solidity` operation surface. The two packages are authored separately (encrypted-types by the Confidential Token Association, FHE.sol by Zama) and do not require lockstep coverage. An agent greping `EncryptedTypes.sol` sees all the declared types; an agent greping `FHE.sol` sees the usable subset. **Only the latter matters for writing code that compiles.**
 - **Third-case observation (worth naming in submission README):** this is the third time in Phase 2 that the skill's own verification discipline has caught a wrong prior in the skill's own authoring. First: the `encrypted-types` package layout (types not in `@fhevm/solidity`). Second: the Hardhat HH411 trap on `fhevm/` imports. Third: orphan declarations. Three data points is enough to make the "the discipline catches its own authors" claim non-anecdotal — and that's a claim worth making in the submission, because it's evidence the skill's methodology is robust against the authors it was written by, not just the agents it was written for.
 
+### 2026-04-19 — `cleanTransientStorage` clears ACL + input verifier transient state in one call
+
+> Calling `FHE.cleanTransientStorage()` mid-transaction wipes both transient ACL grants **and** input verifier transient state. The bundling is not selectable — there is no public single-store cleanup function exposed. An agent calling `cleanTransientStorage` to "clean up transient ACL grants" will silently break any in-flight `FHE.fromExternal` call later in the same transaction.
+
+- **What I was trying to do:** verify the signature and semantics of `FHE.cleanTransientStorage()` while drafting `access-control.md` §3.2.
+- **What happened:** the function source revealed two internal calls bundled into one public function:
+  ```solidity
+  function cleanTransientStorage() internal {
+      Impl.cleanTransientStorageACL();
+      Impl.cleanTransientStorageInputVerifier();
+  }
+  ```
+  No parameters. Global. Both stores cleared together; no selective cleanup function is exposed.
+- **Why this is a footgun:** an agent reading the function name expects "clean up my transient ACL grants" — a reasonable interpretation of the symbol. The actual behavior also resets the input verifier's transient state, which is used by `FHE.fromExternal` to validate caller-submitted encrypted inputs against their proofs. A function that calls `allowTransient`, then does some work, then calls `cleanTransientStorage`, then calls `fromExternal` for a new input later in the same transaction will hit failures on the second `fromExternal` call that look unrelated to the cleanup. The naming hides the bundle.
+- **Caught how:** while writing the `access-control.md` draft, I greped the function with `grep -nA 3 "function cleanTransientStorage"` to verify the signature. The `-A 3` revealed the two internal calls. Without the `-A 3` flag (i.e., looking only at the function declaration line), the bundle would not have surfaced — the signature alone gives no hint that input verifier state is also affected.
+- **Process lesson:** when verifying a function signature for an op-heavy reference file, grep with surrounding context (`-A 3` or `-B 1 -A 5`), not just the declaration line. Function declarations describe what they're called; their bodies describe what they do. The discrepancy is the kind of detail that becomes a footgun in agent-generated code.
+- **Why I didn't see it coming:** I assumed that a function named `cleanTransientStorage` would map to a single conceptual store named "transient storage" — singular. The library has *two* transient stores (ACL grants, input verifier state) and one cleanup function that addresses both. Naming asymmetry: two underlying stores, one bundled cleanup, no per-store public surface. An agent reading the name and inferring "transient storage" → "ACL grants" specifically is following a reasonable but wrong inference path.
+
