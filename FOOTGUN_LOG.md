@@ -236,3 +236,23 @@ Comparing the prospective entry above against what actually happened:
 - **Process lesson:** when verifying a function signature for an op-heavy reference file, grep with surrounding context (`-A 3` or `-B 1 -A 5`), not just the declaration line. Function declarations describe what they're called; their bodies describe what they do. The discrepancy is the kind of detail that becomes a footgun in agent-generated code.
 - **Why I didn't see it coming:** I assumed that a function named `cleanTransientStorage` would map to a single conceptual store named "transient storage" — singular. The library has *two* transient stores (ACL grants, input verifier state) and one cleanup function that addresses both. Naming asymmetry: two underlying stores, one bundled cleanup, no per-store public surface. An agent reading the name and inferring "transient storage" → "ACL grants" specifically is following a reasonable but wrong inference path.
 
+### 2026-04-29 — `FHE.fromExternal` has two authorization paths — cryptographic proof or existing ACL
+
+> The function `FHE.fromExternal(handle, proof)` has two paths gated on whether `proof` is empty. With a non-empty proof, `Impl.verify` checks the cryptographic binding to `(contract, sender)` — wrong combination fires `InvalidSigner()`. With an empty proof, the function checks whether `msg.sender` already has ACL on the handle — no ACL fires `SenderNotAllowedToUseHandle(handle, sender)`.
+>
+> The empty-proof path is **not a verification skip**. It exists for account-abstraction wallets that have already been authorized on a handle in a prior UserOp and want to re-pass it without minting a fresh proof. An agent reading code that calls `fromExternal(handle, "")` should not assume the proof was forgotten — it's a deliberate library feature.
+>
+> Both paths enforce the same invariant (only authorized callers can introduce a handle into a contract) via different mechanisms.
+
+- **What I was trying to do:** capture the signature and behavior of `FHE.fromExternal` for `input-proofs.md` §2. The grep with surrounding context (`-A 6` extended to `-A 15` on follow-up) revealed the function body, not just the declaration.
+- **What happened:** the function body has an `if (inputProof.length != 0) { /* cryptographic */ } else { /* ACL check */ }` structure that's not visible from the signature alone. The standard mental model — "fromExternal verifies a proof, returns a handle" — is half the story.
+- **Error modes:** two distinct, distinguishable reverts:
+  - `InvalidSigner()` — proof present, cryptographic verification rejected (mismatched contract OR mismatched sender, both fire the same error class).
+  - `SenderNotAllowedToUseHandle(bytes32 handle, address sender)` — proof empty, sender lacks ACL on the handle.
+- **Time wasted:** ~5 min on the follow-up grep + ~5 min reasoning about the AA-wallet use case before drafting. Net-positive on the credibility budget — without this finding, the draft would have characterized `fromExternal` as a single-path verification function and missed a load-bearing library feature.
+- **Why I didn't see it coming:** the doc comment on `fromExternal` mentions the empty-proof path but only obliquely ("could facilitate integrating smart contract accounts with fhevm"). The mechanism — ACL check as authorization mechanism in lieu of cryptographic proof — is invisible from the signature, and the doc comment doesn't name `Impl.isAllowed` as the alternate check. The function's body had to be read directly. **Process lesson reinforced from yesterday's `cleanTransientStorage` entry: function declarations describe what they're called; their bodies describe what they do. Grep with `-A` context for any function whose behavior matters to the file being drafted.**
+- **Why this is a footgun for agents:** the standard Solidity mental model for "validate-then-convert" functions has one path. An agent reading FHEVM contracts in the wild may encounter `FHE.fromExternal(handle, "")` and reach for one of two wrong inferences:
+  1. "The author forgot the proof — I should add one back." (Wrong — the empty form is deliberate for AA wallets.)
+  2. "Empty proof bypasses verification — this is a security hole." (Wrong — the ACL check is the authorization mechanism on this path.)
+  Documenting both paths explicitly prevents both inferences.
+
