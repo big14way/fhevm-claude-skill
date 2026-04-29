@@ -256,3 +256,17 @@ Comparing the prospective entry above against what actually happened:
   2. "Empty proof bypasses verification — this is a security hole." (Wrong — the ACL check is the authorization mechanism on this path.)
   Documenting both paths explicitly prevents both inferences.
 
+### 2026-04-29 — `makePubliclyDecryptable` silently substitutes default values on uninitialized handles
+
+> Calling `FHE.makePubliclyDecryptable` on a state variable that has never been written to does **not revert**. The function source begins with an `isInitialized` check that silently substitutes a type-appropriate default — `false` for `ebool`, `0` for `euint8` through `euint256`, `address(0)` for `eaddress` — and marks that default as publicly decryptable.
+>
+> An off-chain client decrypting the resulting handle gets the substituted zero **successfully**, with no error and no "no value yet" signal. If a contract needs to distinguish "tally was zero" from "tally was never set," the distinction must live in a separate boolean state variable; the encrypted handle alone cannot carry it.
+
+- **What I was trying to do:** capture the signature of `FHE.makePubliclyDecryptable` while drafting `decryption.md` §2. Standard middle-path: grep with surrounding context (`-A 4`) to see the body, not just the declaration line.
+- **What happened:** the function source revealed an `if (!isInitialized(value)) { value = asEXX(...); }` substitution at the top of every overload. The substitution is invisible from the declaration line; only the body shows it.
+- **Error mode:** none — and that's the footgun. There's no error to surface. The function succeeds, the off-chain client decrypts to the type's zero value, and the contract / caller receives a plaintext that *looks like* a real result.
+- **Time wasted:** ~3 min on the grep + ~5 min on reasoning about the implications. Net-positive — without this finding, `decryption.md` §2 would have characterized `makePubliclyDecryptable` as "marks the handle for public decryption" without the silent-default footnote, and an agent generating "reveal this tally before any votes" code would silently expose decrypted-zero with no error path to flag the issue.
+- **Fix:** documented inline in `decryption.md` §2.3 with the explicit substitution table per type and the contract-design rule "track 'value was set' separately if the distinction matters." Same discipline as `cleanTransientStorage` — name the bundled / silent / default-handling behavior so an agent doesn't infer "no error = correct result."
+- **Why I didn't see it coming:** standard Solidity functions either succeed with the requested behavior or revert. "Succeeds with substituted-default behavior" is a third path that's not part of the standard mental model. The function's name (`makePubliclyDecryptable`) describes the intent; the body's substitution describes a defensive fallback that the name doesn't disclose.
+- **Process lesson reinforced:** **function declarations describe what they're called; their bodies describe what they do.** Same pattern as the `cleanTransientStorage` finding (declaration says "clean transient storage"; body clears two distinct stores) and the `fromExternal` dual-path finding (declaration says "convert external to internal"; body has two authorization paths). Three findings across three reference files where the body diverged from the declaration's implication, all caught by `grep -A N` instead of just `grep`. The N matters; default `grep` shows the declaration only.
+
