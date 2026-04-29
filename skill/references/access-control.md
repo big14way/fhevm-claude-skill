@@ -176,6 +176,8 @@ Notably, **delegation is revocable** (these functions exist) while per-handle AC
 
 This file does not document the delegation surface in detail because it is rare in practice and orthogonal to ACL design. If a contract needs delegation, see `references/decryption.md` and the relayer SDK docs for the user-decryption flow.
 
+For the substantive treatment of delegation — the six on-chain functions, the parallel SDK flow, and when to use it — see `references/decryption.md` §4.
+
 ### 3.4 The deny list — exists, scope deferred  [grep-verified for existence]
 
 `FHE.sol` line 9325 references a deny list (doc comment: "Returns whether the account is on the deny list"). This is a separate concept from per-handle ACL — likely a KMS-level or coprocessor-level account blocklist that overrides individual grants.
