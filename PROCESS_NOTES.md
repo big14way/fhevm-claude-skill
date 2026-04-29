@@ -50,3 +50,19 @@ Two consecutive files (`anti-patterns.md` entry 1.4's `euint160` workaround, `en
 **Trade-off:** ~20–30 min extra per heavy file, in exchange for fewer revision rounds and higher factual baseline.
 
 **Why this adjustment matters for the skill's credibility budget:** every factual error that reaches the review stage is a cost paid by both sides — reviewer time to catch it, author time to revise, and an incremental risk that one slips through. Front-loading verification on files where API specificity is the content trades cheap upfront grep-work for expensive downstream cleanup. The heavy/light split is deliberate: files dominated by conceptual material (testing patterns, troubleshooting trees, frontend orientation) are not verification-dense in the same way, and applying the heavier discipline there would be over-engineered.
+
+### 2026-04-29 — Front-load grep verification: the catch-rate pattern
+
+Three substantive findings during Phase 2 reference drafting were "reasoned forward" claims that grep disproved before they shipped:
+
+1. **`fromExternal` verifies a proof** — actually has dual paths (cryptographic proof OR existing ACL). Caught while drafting `input-proofs.md`.
+2. **8-bit-increment `euint*` widths are usable** — actually orphan declarations with zero op overloads. Caught while drafting `encrypted-types.md`.
+3. **Delegate uses standard `userDecrypt`** — actually a parallel SDK surface (`delegatedUserDecrypt` with both addresses explicit). Caught while drafting `decryption.md`.
+
+Each was caught by greping the installed library *at the moment of inference*, before the prose was written. Pattern: any time the next sentence would describe an FHEVM symbol's behavior the author hasn't directly touched, grep first.
+
+**The discipline is asymmetric in cost.** Grep takes seconds; revising a shipped wrong claim costs a review round and a credibility tax. Adopting "grep before any reasoned claim about a symbol" as a default catches this class without slowing other parts of drafting.
+
+This is **not a footgun about FHEVM** — it's an authorial discipline note about working with libraries an LLM has stale priors on. Belongs in PROCESS_NOTES, not FOOTGUN_LOG. The three corrections themselves landed as their own footgun entries (`fromExternal` dual-path, orphan declarations, none for #3 because the catch happened pre-draft and didn't ship a wrong claim).
+
+**Operational rule:** if the next sentence I'm about to write asserts a behavior of a function I haven't personally compiled or tested, grep `node_modules/@fhevm/solidity/lib/FHE.sol` (or the relevant SDK `.d.ts`) for that function name and read the surrounding context before continuing the sentence. The seconds spent are paid back the first time it catches a wrong claim — and across this project's history so far, three out of three "verification at the moment of inference" sorties have caught real wrong claims.
