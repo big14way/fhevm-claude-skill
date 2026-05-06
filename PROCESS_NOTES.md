@@ -66,3 +66,15 @@ Each was caught by greping the installed library *at the moment of inference*, b
 This is **not a footgun about FHEVM** — it's an authorial discipline note about working with libraries an LLM has stale priors on. Belongs in PROCESS_NOTES, not FOOTGUN_LOG. The three corrections themselves landed as their own footgun entries (`fromExternal` dual-path, orphan declarations, none for #3 because the catch happened pre-draft and didn't ship a wrong claim).
 
 **Operational rule:** if the next sentence I'm about to write asserts a behavior of a function I haven't personally compiled or tested, grep `node_modules/@fhevm/solidity/lib/FHE.sol` (or the relevant SDK `.d.ts`) for that function name and read the surrounding context before continuing the sentence. The seconds spent are paid back the first time it catches a wrong claim — and across this project's history so far, three out of three "verification at the moment of inference" sorties have caught real wrong claims.
+
+### 2026-04-29 — Standing rule: additive-only on public branches
+
+Once a commit is on a public branch, history is not rewritten. Mistakes are fixed by additive commits.
+
+**Rationale:** rewriting freshly-pushed public history is not just an ad-hoc-pattern problem, it's a trust signal problem. Force-pushing over the initial state of a public submission repo would look weirder than any artifact ever could. Anyone forking, watching, or auditing the history needs the history to be stable.
+
+**Precedent:** adopted 2026-04-29 after the `NEXT.md` content remained in commit `a971b6a`'s diff after we untracked the file. Decided to leave the history alone; the content was benign and additive cleanup (the index removal and gitignore in `fad03e1`) was the correct path forward. Standing rule emerged from that decision.
+
+**Practical application:** if a public commit shipped wrong content, the fix is a follow-up commit (correction, retraction, or replacement), never a force-push or `filter-branch`. PROCESS_NOTES and FOOTGUN_LOG entries that recharacterize prior commits are the right tool when a narrative correction is needed without a code change.
+
+**Scope:** applies once a commit has been pushed to `origin/main` (or any public branch). Local-only history can still be reorganized via rebase or amend before the first push. The line is the push, not the commit.
