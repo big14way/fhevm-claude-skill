@@ -49,12 +49,16 @@ skill/
 │   ├── operations.md                 # composition idioms, cross-cutting rules
 │   ├── access-control.md             # ACL grants, decision tree, the per-voter / aggregate leak
 │   ├── input-proofs.md               # encrypted-input round-trip, the dual-path verification surface
-│   └── decryption.md                 # public, user, and delegated decryption flows
-└── scripts/
-    └── verify-env.sh                 # the VERIFY layer
+│   ├── decryption.md                 # public, user, and delegated decryption flows
+│   ├── frontend-integration.md       # relayer SDK init, wallet integration, React patterns
+│   └── testing.md                    # @fhevm/hardhat-plugin patterns
+├── scripts/
+│   └── verify-env.sh                 # the VERIFY layer
+└── templates/
+    └── Contract.sol                  # v0.10+-correct boilerplate
 ```
 
-Additional reference files (`frontend-integration.md`, `testing.md`, `troubleshooting.md`), templates (`Contract.sol`, `Contract.test.ts`), and a lint script (`lint-antipatterns.js`) are in active development and will land before the May 10 submission deadline.
+Additional content (`troubleshooting.md`, `Contract.test.ts` test template, `lint-antipatterns.js` lint script) is in active development and will land before the May 10 submission deadline.
 
 The repo also includes `FOOTGUN_LOG.md` and `PROCESS_NOTES.md` at the top level — see the next section.
 
