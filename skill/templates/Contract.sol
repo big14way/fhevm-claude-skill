@@ -52,13 +52,25 @@ contract MyContract is ZamaEthereumConfig {
 
         // CR-1: every FHE op produces a new handle with zero ACL. Re-grant.
         FHE.allowThis(_state);
-        // Add FHE.allow(_state, addr) calls here for any external addresses
-        // that should decrypt this handle off-chain. See
-        // references/access-control.md §1.2 for the decision tree, and §4.2
-        // for the per-voter / aggregate leak that makes the second-grant
-        // choice subtle.
+
+        // Grant the caller ACL on the new handle so they can decrypt the
+        // post-mutation value off-chain.
+        //
+        // SAFE in single-user state holders like this skeleton — _state is
+        // not an aggregate, so granting msg.sender exposes only their own
+        // contribution.
+        //
+        // DANGEROUS in multi-user contracts where _state aggregates across
+        // callers — granting msg.sender on the aggregate leaks every other
+        // caller's contribution. For multi-user patterns, use per-caller
+        // storage (mapping(address => euintXX)) granted to that caller, plus
+        // a separate aggregate granted only to a privileged role. See
+        // references/access-control.md §4.2 for the canonical pattern.
+        FHE.allow(_state, msg.sender);
+
         // ACL on _state:
         //   contract: uses in subsequent ops
-        //   everyone else: cannot read until you add explicit FHE.allow grants
+        //   msg.sender: decrypts the post-mutation value off-chain
+        //   everyone else: cannot read
     }
 }
