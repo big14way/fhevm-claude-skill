@@ -28,6 +28,14 @@ contract MyContract is ZamaEthereumConfig {
         //   everyone else: cannot read until you add explicit FHE.allow grants
     }
 
+    // Returns the encrypted handle for off-chain decryption.
+    // The caller decides the decryption flow (user-decrypt via relayer SDK,
+    // public-decrypt after FHE.makePubliclyDecryptable, etc.) — this contract
+    // just exposes the handle. See references/decryption.md for the flows.
+    function getState() external view returns (euint32) {
+        return _state;
+    }
+
     // Example mutating function — takes an encrypted input, validates the
     // proof, updates state, re-grants ACL on the new handle.
     function exampleMutate(externalEuint32 enc, bytes calldata proof) external {
