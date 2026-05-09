@@ -51,14 +51,15 @@ skill/
 │   ├── input-proofs.md               # encrypted-input round-trip, the dual-path verification surface
 │   ├── decryption.md                 # public, user, and delegated decryption flows
 │   ├── frontend-integration.md       # relayer SDK init, wallet integration, React patterns
-│   └── testing.md                    # @fhevm/hardhat-plugin patterns
+│   ├── testing.md                    # @fhevm/hardhat-plugin patterns
+│   └── troubleshooting.md            # error catalog and triage
 ├── scripts/
-│   └── verify-env.sh                 # the VERIFY layer
+│   ├── verify-env.sh                 # the VERIFY layer
+│   └── lint-antipatterns.js          # substring scan for refused patterns
 └── templates/
-    └── Contract.sol                  # v0.10+-correct boilerplate
+    ├── Contract.sol                  # v0.10+-correct boilerplate
+    └── Contract.test.ts              # paired hardhat-plugin test template
 ```
-
-Additional content (`troubleshooting.md`, `Contract.test.ts` test template, `lint-antipatterns.js` lint script) is in active development and will land before the May 10 submission deadline.
 
 The repo also includes `FOOTGUN_LOG.md` and `PROCESS_NOTES.md` at the top level — see the next section.
 
