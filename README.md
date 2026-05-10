@@ -95,7 +95,7 @@ The demo exercises the skill's load-bearing patterns end-to-end: per-bidder ACL 
 
 ### Demo video
 
-[Link to be added at submission.] A short screen recording shows Claude Code, with this skill loaded, producing a working confidential FHEVM application from a natural-language prompt — including contract, tests, and a clean run against the mock coprocessor.
+[https://youtu.be/jNose-JBnxA?si=2DchEkEpZjDQAAgv.] A short screen recording shows Claude Code, with this skill loaded, producing a working confidential FHEVM application from a natural-language prompt — including contract, tests, and a clean run against the mock coprocessor.
 
 ---
 
