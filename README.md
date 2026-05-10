@@ -87,9 +87,15 @@ The `PROCESS_NOTES.md` file captures authorial discipline observations, includin
 
 ---
 
-## Demo video
+## Demo
 
-[Link to be added at submission.] A 3-minute screen recording shows Claude Code, with this skill loaded, producing a working confidential FHEVM application from a single natural-language prompt — including contract, tests, and deployment.
+A working confidential application built using the skill lives at [`demo/`](./demo/) — a sealed-bid auction where three bidders submit encrypted bids, the admin reveals only the winning amount, and losing bids stay encrypted forever. Seven mock-mode tests pass; the contract is structured to deploy to Sepolia without changes.
+
+The demo exercises the skill's load-bearing patterns end-to-end: per-bidder ACL with aggregate-revealed-via-public-decrypt (the canonical leak prevention from `skill/references/access-control.md` §4), encrypted comparison via `FHE.gt` + `FHE.select` (from `skill/references/operations.md` §2.4), and deadline-gated public decryption (from `skill/references/decryption.md` §2). See [`demo/README.md`](./demo/README.md) for the full walkthrough.
+
+### Demo video
+
+[Link to be added at submission.] A short screen recording shows Claude Code, with this skill loaded, producing a working confidential FHEVM application from a natural-language prompt — including contract, tests, and a clean run against the mock coprocessor.
 
 ---
 
